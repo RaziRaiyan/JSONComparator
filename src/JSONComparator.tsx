@@ -1,9 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { AlertCircle, Check, X, FileJson, RefreshCw } from "lucide-react";
-
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-
+import type { JsonValue } from "./types";
+import { JsonViewer } from "./JSONTreeViewer";
 interface DiffResult {
   path: string;
   type: "added" | "removed" | "modified" | "equal";
@@ -16,8 +14,29 @@ const JsonComparator: React.FC = () => {
   const [json2, setJson2] = useState("");
   const [error1, setError1] = useState("");
   const [error2, setError2] = useState("");
+  const [isShowingDiffs, setIsShowingDiffs] = useState<boolean>(false);
   const [diffs, setDiffs] = useState<DiffResult[]>([]);
   const [showOnlyDiffs, setShowOnlyDiffs] = useState(false);
+
+  const json1Parsed = useMemo(() => {
+    const value = json1;
+    try {
+      const parsed = JSON.parse(value);
+      return parsed;
+    } catch (err) {
+      console.log(err);
+    }
+  }, [json1]);
+
+  const json2Parsed = useMemo(() => {
+    const value = json2;
+    try {
+      const parsed = JSON.parse(value);
+      return parsed;
+    } catch (err) {
+      console.log(err);
+    }
+  }, [json2]);
 
   const validateJson = (
     text: string,
@@ -124,6 +143,79 @@ const JsonComparator: React.FC = () => {
     return results;
   };
 
+  const getStringDiffSpans = (oldStr: string, newStr: string) => {
+    // find common prefix length
+    const minLen = Math.min(oldStr.length, newStr.length);
+    let prefix = 0;
+    while (prefix < minLen && oldStr[prefix] === newStr[prefix]) prefix++;
+
+    // find common suffix length (but do not overlap prefix)
+    let suffix = 0;
+    while (
+      suffix < minLen - prefix &&
+      oldStr[oldStr.length - 1 - suffix] === newStr[newStr.length - 1 - suffix]
+    )
+      suffix++;
+
+    const oldMiddle = oldStr.slice(prefix, oldStr.length - suffix || undefined);
+    const newMiddle = newStr.slice(prefix, newStr.length - suffix || undefined);
+    const pre = oldStr.slice(0, prefix);
+    const post = oldStr.slice(oldStr.length - suffix) || "";
+
+    // return two JSX fragments: old and new (with different highlight styles)
+    const oldNode = (
+      <span className="font-mono text-sm break-words">
+        <span>{pre}</span>
+        <span className="bg-red-200 text-red-800 px-0.5 rounded">
+          {oldMiddle}
+        </span>
+        <span>{post}</span>
+      </span>
+    );
+
+    const newNode = (
+      <span className="font-mono text-sm break-words">
+        <span>{pre}</span>
+        <span className="bg-green-200 text-green-800 px-0.5 rounded">
+          {newMiddle}
+        </span>
+        <span>{post}</span>
+      </span>
+    );
+
+    return { oldNode, newNode };
+  };
+
+  const renderValueWithHighlight = (
+    value: JsonValue | undefined,
+    peerValue?: JsonValue, // if provided and both are strings, highlight diffs
+    role: "old" | "new" | "single" = "single"
+  ): React.ReactNode => {
+    // highlight when both values are strings
+    if (typeof value === "string" && typeof peerValue === "string") {
+      const { oldNode, newNode } = getStringDiffSpans(
+        value as string,
+        peerValue as string
+      );
+      return role === "old" ? oldNode : newNode;
+    }
+
+    // fallback for objects / arrays / null / numbers
+    if (typeof value === "object" && value !== null) {
+      return (
+        <pre className="font-mono text-sm whitespace-pre-wrap">
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      );
+    }
+    if (value === null) return <span className="font-mono text-sm">null</span>;
+    if (value === undefined)
+      return <span className="font-mono text-sm">undefined</span>;
+    if (typeof value === "string")
+      return <span className="font-mono text-sm">"{value}"</span>;
+    return <span className="font-mono text-sm">{String(value)}</span>;
+  };
+
   const handleCompare = () => {
     const parsed1 = validateJson(json1, setError1);
     const parsed2 = validateJson(json2, setError2);
@@ -131,8 +223,10 @@ const JsonComparator: React.FC = () => {
     if (parsed1 !== null && parsed2 !== null) {
       const differences = compareObjects(parsed1, parsed2);
       setDiffs(differences);
+      setIsShowingDiffs(true);
     } else {
       setDiffs([]);
+      setIsShowingDiffs(false);
     }
   };
 
@@ -189,6 +283,7 @@ const JsonComparator: React.FC = () => {
     setError1("");
     setError2("");
     setDiffs([]);
+    setIsShowingDiffs(false);
   };
 
   const filteredDiffs = showOnlyDiffs
@@ -208,7 +303,7 @@ const JsonComparator: React.FC = () => {
         className="flex gap-4 flex-row"
         style={{ height: "calc(100vh - 50px)" }}
       >
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col max-h-full">
           <div className="mb-8 text-center">
             <div className="flex items-center justify-center gap-3 mb-2">
               <FileJson className="w-10 h-10 text-blue-600" />
@@ -221,8 +316,11 @@ const JsonComparator: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex gap-4 flex-row flex-1">
-            <div className="bg-white rounded-lg shadow-md p-6">
+          <div
+            className="flex gap-4 flex-row flex-1 overflow-auto"
+            style={{ maxHeight: "calc(100% - 100px)" }}
+          >
+            <div className="bg-white rounded-lg shadow-md p-6 flex-1 h-full min-h-fit max-w-[50%]">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold text-slate-700">JSON 1</h2>
                 {error1 && (
@@ -232,24 +330,28 @@ const JsonComparator: React.FC = () => {
                   </div>
                 )}
               </div>
-              <textarea
-                value={json1}
-                onChange={(e) => {
-                  setJson1(e.target.value);
-                  validateJson(e.target.value, setError1);
-                }}
-                placeholder='{"name": "John", "age": 30}'
-                className={`[&::selection]:bg-yellow-100 w-full text-black h-64 p-3 border rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 ${
-                  error1
-                    ? "border-red-300 focus:ring-red-500"
-                    : "border-slate-300 focus:ring-blue-500"
-                }`}
-                style={{ width: "530px", height: "calc(100% - 32px)" }}
-              />
+              {isShowingDiffs ? (
+                <JsonViewer data={json1Parsed} />
+              ) : (
+                <textarea
+                  value={json1}
+                  onChange={(e) => {
+                    setJson1(e.target.value);
+                    validateJson(e.target.value, setError1);
+                  }}
+                  placeholder='{"name": "John", "age": 30}'
+                  className={`[&::selection]:bg-yellow-100 w-full text-black h-64 p-3 border rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 ${
+                    error1
+                      ? "border-red-300 focus:ring-red-500"
+                      : "border-slate-300 focus:ring-blue-500"
+                  }`}
+                  style={{ width: "100%", height: "calc(100% - 32px)" }}
+                />
+              )}
               {error1 && <p className="mt-2 text-sm text-red-600">{error1}</p>}
             </div>
 
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="bg-white rounded-lg shadow-md p-6 flex-1 h-full min-h-fit max-w-[50%]">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold text-slate-700">JSON 2</h2>
                 {error2 && (
@@ -259,42 +361,62 @@ const JsonComparator: React.FC = () => {
                   </div>
                 )}
               </div>
-              <textarea
-                value={json2}
-                onChange={(e) => {
-                  setJson2(e.target.value);
-                  validateJson(e.target.value, setError2);
-                }}
-                placeholder='{"name": "Jane", "age": 30, "city": "NYC"}'
-                className={`[&::selection]:bg-yellow-100 w-full text-black h-64 p-3 border rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 ${
-                  error2
-                    ? "border-red-300 focus:ring-red-500"
-                    : "border-slate-300 focus:ring-blue-500"
-                }`}
-                style={{ width: "530px", height: "calc(100% - 32px)" }}
-              />
+              {isShowingDiffs ? (
+                <JsonViewer data={json2Parsed} />
+              ) : (
+                <textarea
+                  value={json2}
+                  onChange={(e) => {
+                    setJson2(e.target.value);
+                    validateJson(e.target.value, setError2);
+                  }}
+                  placeholder='{"name": "Jane", "age": 30, "city": "NYC"}'
+                  className={`[&::selection]:bg-yellow-100 w-full text-black h-64 p-3 border rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 ${
+                    error2
+                      ? "border-red-300 focus:ring-red-500"
+                      : "border-slate-300 focus:ring-blue-500"
+                  }`}
+                  style={{ width: "100%", height: "calc(100% - 32px)" }}
+                />
+              )}
               {error2 && <p className="mt-2 text-sm text-red-600">{error2}</p>}
             </div>
           </div>
 
           <div className="flex gap-3 mt-4">
-            <button
-              onClick={handleCompare}
-              disabled={!json1.trim() || !json2.trim() || !!error1 || !!error2}
-              className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-md"
-            >
-              Compare JSON
-            </button>
-            <button
-              onClick={handleClear}
-              className="bg-slate-200 text-slate-7 py-3 px-6 rounded-lg font-semibold hover:bg-slate-300 transition-colors shadow-md"
-            >
-              Clear All
-            </button>
+            {isShowingDiffs ? (
+              <button
+                onClick={() => setIsShowingDiffs(false)}
+                disabled={
+                  !json1.trim() || !json2.trim() || !!error1 || !!error2
+                }
+                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-md"
+              >
+                Edit JSONs
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleCompare}
+                  disabled={
+                    !json1.trim() || !json2.trim() || !!error1 || !!error2
+                  }
+                  className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-md"
+                >
+                  Compare JSON
+                </button>
+                <button
+                  onClick={handleClear}
+                  className="bg-slate-200 text-slate-7 py-3 px-6 rounded-lg font-semibold hover:bg-slate-300 transition-colors shadow-md"
+                >
+                  Clear All
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="flex-1">
+        <div className="min-w-[550px] max-w-[550px]">
           <div className="bg-white rounded-lg shadow-md h-full">
             <div className="flex items-center justify-between px-6 py-3">
               <h2 className="text-xl font-semibold text-slate-800">
@@ -365,24 +487,52 @@ const JsonComparator: React.FC = () => {
                         {diff.type === "removed" && (
                           <div className="font-mono text-red-700">
                             <span className="text-red-500">- </span>
-                            {formatValue(diff.oldValue)}
+                            {typeof diff.oldValue === "string" &&
+                            typeof diff.newValue === "string"
+                              ? renderValueWithHighlight(
+                                  diff.oldValue,
+                                  diff.newValue,
+                                  "old"
+                                )
+                              : renderValueWithHighlight(diff.oldValue)}
                           </div>
                         )}
                         {diff.type === "added" && (
                           <div className="font-mono text-green-700">
                             <span className="text-green-500">+ </span>
-                            {formatValue(diff.newValue)}
+                            {typeof diff.oldValue === "string" &&
+                            typeof diff.newValue === "string"
+                              ? renderValueWithHighlight(
+                                  diff.newValue,
+                                  diff.oldValue,
+                                  "new"
+                                )
+                              : renderValueWithHighlight(diff.newValue)}
                           </div>
                         )}
                         {diff.type === "modified" && (
                           <>
                             <div className="font-mono text-red-700">
                               <span className="text-red-500">- </span>
-                              {formatValue(diff.oldValue)}
+                              {typeof diff.oldValue === "string" &&
+                              typeof diff.newValue === "string"
+                                ? renderValueWithHighlight(
+                                    diff.oldValue,
+                                    diff.newValue,
+                                    "old"
+                                  )
+                                : renderValueWithHighlight(diff.oldValue)}
                             </div>
                             <div className="font-mono text-green-700">
                               <span className="text-green-500">+ </span>
-                              {formatValue(diff.newValue)}
+                              {typeof diff.oldValue === "string" &&
+                              typeof diff.newValue === "string"
+                                ? renderValueWithHighlight(
+                                    diff.newValue,
+                                    diff.oldValue,
+                                    "new"
+                                  )
+                                : renderValueWithHighlight(diff.newValue)}
                             </div>
                           </>
                         )}

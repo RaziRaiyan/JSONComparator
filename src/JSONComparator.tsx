@@ -314,10 +314,7 @@ const JsonComparator: React.FC = () => {
               </label>
             </div>
 
-            <div
-              className="grid grid-cols-4 gap-3 px-6 py-3"
-              style={{ maxHeight: "calc(100vh - 210px)" }}
-            >
+            <div className="grid grid-cols-4 gap-3 px-6 py-3">
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <div className="text-2xl font-bold text-green-700">
                   {diffStats.added}
@@ -344,7 +341,10 @@ const JsonComparator: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-2 px-6 py-3">
+            <div
+              className="space-y-2 px-6 py-3 overflow-auto"
+              style={{ maxHeight: "calc(100vh - 210px)" }}
+            >
               {filteredDiffs.map((diff, index) => (
                 <div
                   key={index}

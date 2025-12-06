@@ -2,6 +2,10 @@ import React, { useMemo, useState } from "react";
 import { AlertCircle, Check, X, FileJson, RefreshCw } from "lucide-react";
 import type { JsonValue } from "./types";
 import { JsonViewer } from "./JSONTreeViewer";
+
+import { Checkbox } from "radix-ui";
+import { CheckIcon } from "@radix-ui/react-icons";
+
 interface DiffResult {
   path: string;
   type: "added" | "removed" | "modified" | "equal";
@@ -16,7 +20,9 @@ const JsonComparator: React.FC = () => {
   const [error2, setError2] = useState("");
   const [isShowingDiffs, setIsShowingDiffs] = useState<boolean>(false);
   const [diffs, setDiffs] = useState<DiffResult[]>([]);
-  const [showOnlyDiffs, setShowOnlyDiffs] = useState(false);
+  const [showOnlyDiffs, setShowOnlyDiffs] = useState<boolean | "indeterminate">(
+    false
+  );
 
   const json1Parsed = useMemo(() => {
     const value = json1;
@@ -298,28 +304,44 @@ const JsonComparator: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
-      <div
-        className="flex gap-4 flex-row"
-        style={{ height: "calc(100vh - 50px)" }}
-      >
-        <div className="flex-1 flex flex-col max-h-full">
-          <div className="mb-8 text-center">
-            <div className="flex items-center justify-center gap-3 mb-2">
-              <FileJson className="w-10 h-10 text-blue-600" />
-              <h1 className="text-4xl font-bold text-slate-800">
-                JSON Comparator
-              </h1>
-            </div>
-            <p className="text-slate-600">
-              Compare two JSON objects and visualize the differences
-            </p>
-          </div>
+    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 p-6 flex flex-col">
+      <div className="mb-4 border border-gray-50 p-2 rounded-lg bg-white shadow-md flex flex-row justify-between">
+        <FileJson className="w-10 h-10 text-blue-600" />
 
-          <div
-            className="flex gap-4 flex-row flex-1 overflow-auto"
-            style={{ maxHeight: "calc(100% - 100px)" }}
-          >
+        <div className="flex gap-3">
+          {isShowingDiffs ? (
+            <button
+              onClick={() => setIsShowingDiffs(false)}
+              disabled={!json1.trim() || !json2.trim() || !!error1 || !!error2}
+              className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-md"
+            >
+              Edit JSONs
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={handleCompare}
+                disabled={
+                  !json1.trim() || !json2.trim() || !!error1 || !!error2
+                }
+                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-md"
+              >
+                Compare JSON
+              </button>
+              <button
+                onClick={handleClear}
+                className="bg-slate-200 text-slate-7 py-3 px-6 rounded-lg font-semibold hover:bg-slate-300 transition-colors shadow-md"
+              >
+                Clear All
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-4 flex-row flex-1">
+        <div className="flex-1 flex flex-col max-h-full">
+          <div className="flex gap-4 flex-row flex-1">
             <div className="bg-white rounded-lg shadow-md p-6 flex-1 h-full min-h-fit max-w-[50%]">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold text-slate-700">JSON 1</h2>
@@ -382,38 +404,6 @@ const JsonComparator: React.FC = () => {
               {error2 && <p className="mt-2 text-sm text-red-600">{error2}</p>}
             </div>
           </div>
-
-          <div className="flex gap-3 mt-4">
-            {isShowingDiffs ? (
-              <button
-                onClick={() => setIsShowingDiffs(false)}
-                disabled={
-                  !json1.trim() || !json2.trim() || !!error1 || !!error2
-                }
-                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-md"
-              >
-                Edit JSONs
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={handleCompare}
-                  disabled={
-                    !json1.trim() || !json2.trim() || !!error1 || !!error2
-                  }
-                  className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-md"
-                >
-                  Compare JSON
-                </button>
-                <button
-                  onClick={handleClear}
-                  className="bg-slate-200 text-slate-7 py-3 px-6 rounded-lg font-semibold hover:bg-slate-300 transition-colors shadow-md"
-                >
-                  Clear All
-                </button>
-              </>
-            )}
-          </div>
         </div>
 
         <div className="min-w-[550px] max-w-[550px]">
@@ -422,18 +412,29 @@ const JsonComparator: React.FC = () => {
               <h2 className="text-xl font-semibold text-slate-800">
                 Comparison Results
               </h2>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
+
+              <div className="flex items-center text-black gap-2">
+                <Checkbox.Root
+                  className="CheckboxRoot  h-5 w-5 rounded-sm bg-white-imp border border-black"
+                  defaultChecked
+                  id="c1"
                   checked={showOnlyDiffs}
-                  onChange={(e) => setShowOnlyDiffs(e.target.checked)}
-                  className="appearance-none w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 bg-white  checked:bg-blue-600 
-         border border-gray-400 checked:border-blue-600 "
-                />
-                <span className="text-sm text-slate-700">
+                  onCheckedChange={(val) => setShowOnlyDiffs(val)}
+                  style={{
+                    padding: "0px",
+                    background: "white",
+                    border: "1px solid black",
+                    borderRadius: "4px",
+                  }}
+                >
+                  <Checkbox.Indicator className="CheckboxIndicator">
+                    <CheckIcon />
+                  </Checkbox.Indicator>
+                </Checkbox.Root>
+                <label className="Label" htmlFor="c1">
                   Show only differences
-                </span>
-              </label>
+                </label>
+              </div>
             </div>
 
             <div className="grid grid-cols-4 gap-3 px-6 py-3">

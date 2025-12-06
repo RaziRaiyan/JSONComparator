@@ -26,7 +26,7 @@ type JsonViewerProps = {
 
 export function JsonViewer({
   data,
-  rootName = "data",
+  rootName = "",
   defaultExpanded = true,
   className,
 }: JsonViewerProps) {
@@ -159,7 +159,7 @@ function JsonNode({
               defaultExpanded={level < 1}
             />
           ))}
-          <div className="text-muted-foreground pl-4 py-1">
+          <div className="text-muted-foreground py-1">
             {dataType === "array" ? "]" : "}"}
           </div>
         </div>
